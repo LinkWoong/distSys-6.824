@@ -28,6 +28,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// return map and reduce workers in the form of functions
+	// mapf function signature: func(string, string) []mr.KeyValue take <K,V> as input, returns a list of Objects
+	// that are of type mr.KeyValue. Output of this function is the intermediate value in origional MapReduce paper
+	
+	// reducef function signature: func(string, []string) string take unique Key and list of string as input.
+	// Return processed result
 	mapf, reducef := loadPlugin(os.Args[1])
 
 	//
