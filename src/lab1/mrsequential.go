@@ -73,7 +73,8 @@ func main() {
 	//
 	i := 0
 	for i < len(intermediate) {
-		j := i + 1
+		j := i + 1 // this j here means append all values that has same key into the result
+		// acts as a dedup process so that values that appended will contain only unique keys
 		for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
 			j++
 		}
