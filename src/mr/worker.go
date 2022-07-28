@@ -35,7 +35,27 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	// uncomment to send the Example RPC to the coordinator.
 	// CallExample()
+	filename, content := retrieveOneTaskFromCoordinator()
+	fmt.Printf("filename %v, content %v", filename, content)
+}
 
+func retrieveOneTaskFromCoordinator() (string, string) {
+	args := MapWorkerTaskArgs{}
+	reply := MapWorkerTaskReply{}
+	
+	// send the RPC request, wait for the reply.
+	// the "Coordinator.Example" tells the
+	// receiving server that we'd like to call
+	// the Example() method of struct Coordinator.
+	ok := call("Coordinator.TaskDistribution", &args, &reply)
+	if ok {
+		// reply.Y should be 100.
+		fmt.Println("YESSSSSSSS!!!!!!")
+	} else {
+		fmt.Printf("call failed!\n")
+	}
+	
+	return reply.Filename, reply.Content
 }
 
 //
