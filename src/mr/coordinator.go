@@ -1,12 +1,13 @@
 package mr
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
-	"io/ioutil"
 )
 
 
@@ -18,7 +19,9 @@ type Coordinator struct {
 }
 
 // Your code here -- RPC handlers for the worker to call.
+// give a task to a MapWorker
 func (c *Coordinator) TaskDistribution(args *MapWorkerTaskArgs, reply *MapWorkerTaskReply) error {
+	if len(c.Files) == 0 { return nil }
 	filename := c.Files[0]
 	file, err := os.Open(filename)
 	if err != nil {
@@ -29,8 +32,11 @@ func (c *Coordinator) TaskDistribution(args *MapWorkerTaskArgs, reply *MapWorker
 		log.Fatalf("cannot read %v", filename)
 	}
 	file.Close()
-	args.Filename = filename
-	args.Content = string(content)
+	
+	reply.Filename = filename
+	reply.Content = string(content)
+	reply.NReduce = c.NReduce
+	
 	c.Files = c.Files[1:] // pop the first element as it is a queue
 	return nil
 }
@@ -69,7 +75,11 @@ func (c *Coordinator) Done() bool {
 	ret := false
 
 	// Your code here.
-
+	if (len(c.Files) == 0) {
+		ret = true
+	} else {
+		fmt.Printf("Task not done yet, current task size remaining: %d\n", len(c.Files))
+	}
 
 	return ret
 }
