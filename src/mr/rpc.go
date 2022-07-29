@@ -26,11 +26,13 @@ type ExampleReply struct {
 type MapWorkerTaskArgs struct {
 	Filename string
 	Content string
+	NReduce int
 }
 
 type MapWorkerTaskReply struct {
 	Filename string
 	Content string
+	NReduce int
 }
 
 // Cook up a unique-ish UNIX-domain socket name
