@@ -27,12 +27,24 @@ type MapWorkerTaskArgs struct {
 	Filename string
 	Content string
 	NReduce int
+	Index int
 }
 
 type MapWorkerTaskReply struct {
 	Filename string
 	Content string
 	NReduce int
+	TaskType string
+	Index int
+}
+
+type TaskFinishArgs struct {
+	Index int
+	TaskType string
+}
+
+type TaskFinishReply struct {
+	Status string
 }
 
 // Cook up a unique-ish UNIX-domain socket name
