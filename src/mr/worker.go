@@ -1,12 +1,17 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-import "os"
-import "sort"
-
+import (
+	"encoding/json"
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+	"sort"
+	"strconv"
+	"time"
+)
 
 //
 // Map functions return a slice of KeyValue.
@@ -40,12 +45,187 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	// Your worker implementation here.
-	workerId := 1
-	for areAllTasksComplete() == false {
-		doMapReduce(mapf, reducef, workerId)
-		workerId += 1
+	for {
+		task := GetTaskFromCoordinator()
+		switch task.TaskType {
+		case "wait":
+			break
+		
+		case "map":
+			MapHandler(task.Filename, task.Index, task.NReduce, mapf)
+			FinishTaskFromCoordinator(task)
+			break
+		
+		case "reduce":
+			ReduceHandler(task.Filename, task.Index, task.NReduce, reducef)
+			FinishTaskFromCoordinator(task)
+			break
+		}
+		
+		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+func MapHandler(filename string, mapIndex int, nReduce int, mapf func(string, string) []KeyValue) {
+	
+	// read all raw data
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("Cannot open %v ", filename)
+	}
+	
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("Cannot read %v ", filename)
+	}
+	
+	file.Close()
+	
+	// call mapf to get intermediate value
+	intermediateValue := mapf(filename, string(content))
+	
+	// create a hashList to map the intermediate result to nReduce bucket/partition
+	hashList := make([][]KeyValue, nReduce)
+	
+	for _, kv := range intermediateValue {
+		fileIndex := ihash(kv.Key) % nReduce
+		hashList[fileIndex] = append(hashList[fileIndex], kv)
+	}
+	
+	for reduceIndex, partition := range hashList {
+		intermediateFilename := fmt.Sprintf("mr-%d-%d", mapIndex, reduceIndex)
+		tempIntermediateFilename := fmt.Sprintf("%s-%d", filename, time.Now().Unix())
+		tempFile, _ := os.Create(tempIntermediateFilename)
+		
+		encoder := json.NewEncoder(tempFile)
+		for _, kv := range partition {
+			encoder.Encode(kv)
+		}
+		
+		os.Rename(tempIntermediateFilename, intermediateFilename)
+	}
+}
+
+func ReduceHandler(filename string, index int, nReduce int, reducef func(string, []string) string) {
+	// map worker output will be stored as mr-*-index
+	
+	reduceList := []string{}
+	
+	for _, name := range readCurrentDirectory() {
+		if len(name) >= 6 && 
+		name[3:6] != "out" && 
+		name[:3] == "mr-" &&
+		name[len(name) - 1 - len(strconv.Itoa(index)):] == fmt.Sprintf("-%d", index) {
+			reduceList = append(reduceList, name)
+		}
+	}
+	
+	res := []KeyValue{}
+	
+	for _, filename := range reduceList {
+		file, err := os.Open(filename)
+		decoder := json.NewDecoder(file)
+		
+		for {
+			var kv KeyValue
+			if err := decoder.Decode(&kv); err != nil {
+				break
+			}
+			
+			res = append(res, kv)
+		}
+		
+		if err != nil {
+			log.Fatalf("Cannot read %v", filename)
+		}
+		
+		file.Close()
+	}
+	
+	sort.Sort(ByKey(res))
+	
+	output := fmt.Sprintf("mr-out-%d", index)
+	temp := fmt.Sprintf("%s-%d", output, time.Now().Unix())
+	
+	ofile, _ := os.Create(temp)
+	
+	// perform reducef
+	// print result to mt-out-%d
+	
+	i := 0
+	
+	for i < len(res) {
+		j := i + 1
+		for j < len(res) && res[i].Key == res[j].Key {
+			j += 1
+		}
+		
+		values := []string{}
+		
+		for k := i; k < j; k++ {
+			values = append(values, res[i].Value)
+		}
+		
+		reduceOutput := reducef(res[i].Key, values)
+		
+		fmt.Fprintf(ofile, "%v %v\n", res[i].Key, reduceOutput)
+		
+		i = j
+	}
+	
+	ofile.Close()
+	os.Rename(temp, output)
+}
+
+func FinishTaskFromCoordinator(task MapWorkerTaskReply) TaskFinishReply {
+	args := TaskFinishArgs{
+		Index: task.Index,
+		TaskType: task.TaskType,
+	}
+	
+	reply := TaskFinishReply{}
+	
+	// send the RPC request, wait for the reply.
+	ok := call("Coordinator.CompleteTask", &args, &reply)
+	if ok {
+		
+	} else {
+		fmt.Printf("call failed!\n")
+		os.Exit(0)
+	}
+	
+	return reply
+}
+
+func GetTaskFromCoordinator() MapWorkerTaskReply {
+	args := MapWorkerTaskArgs{}
+	reply := MapWorkerTaskReply{}
+	
+	// send the RPC request, wait for the reply.
+	ok := call("Coordinator.TaskDistribution", &args, &reply)
+	if ok {
+	} else {
+		fmt.Printf("call failed!\n")
+		os.Exit(0)
+	}
+	
+	return reply
+}
+
+func readCurrentDirectory() []string {
+	file, err := os.Open(".")
+	if err != nil {
+		log.Fatalf("Failed to open current directory: %s", err)
+	}
+	
+	defer file.Close()
+	list, _ := file.Readdirnames(0)
+	
+	return list
+}
+
+
+// #########################
 
 func doMapReduce(mapf func(string, string) []KeyValue, reducef func(string, []string) string, workerId int) {
 	// uncomment to send the Example RPC to the coordinator.
@@ -137,35 +317,6 @@ func persistMapWorkerOutput(workerId int, intermediate []KeyValue, reducef func(
 		i = j
 	}
 	ofile.Close()
-}
-
-//
-// example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func CallExample() {
-
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &args, &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
-	} else {
-		fmt.Printf("call failed!\n")
-	}
 }
 
 //
