@@ -81,7 +81,6 @@ func server() {
     // Server then registers that object with the RPC library
     // Server accepts TCP connections, gives them to RPC library
 	kv := new(KV) // register class KV as handler
-	// change something
 	
 	// then we can call KV.Get in client to call Get() methods remotely through RPC
 	kv.data = map[string]string{}
