@@ -113,12 +113,12 @@ func ConcurrentChannel(url string, fetcher Fetcher) {
 // main
 //
 
-func main() {
-	fmt.Printf("=== Serial===\n")
-	Serial("http://golang.org/", fetcher, make(map[string]bool))
+func runCrawler() {
+	// fmt.Printf("=== Serial===\n")
+	// Serial("http://golang.org/", fetcher, make(map[string]bool))
 
-	// fmt.Printf("=== ConcurrentMutex ===\n")
-	// ConcurrentMutex("http://golang.org/", fetcher, makeState())
+	fmt.Printf("=== ConcurrentMutex ===\n")
+	ConcurrentMutex("http://golang.org/", fetcher, makeState())
 
 	// fmt.Printf("=== ConcurrentChannel ===\n")
 	// ConcurrentChannel("http://golang.org/", fetcher)
