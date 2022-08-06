@@ -1,4 +1,4 @@
-package raft
+package lab2
 
 //
 // Raft tests.
