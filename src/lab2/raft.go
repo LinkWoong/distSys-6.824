@@ -19,13 +19,13 @@ package lab2
 
 import (
 	//	"bytes"
+	"log"
 	"sync"
 	"sync/atomic"
 
 	//	"6.824/labgob"
 	"6.824/labrpc"
 )
-
 
 //
 // as each Raft peer becomes aware that successive log entries are
@@ -63,7 +63,19 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
-
+	currentTerm	int
+	votedFor    int // candidateId that received vote in current term
+	log			[]LogEntry // log entries. Each entry contains command for state machine,
+						   // and term when entry was received by leader (index starts at 1)
+	
+	commitIndex	int // index of highest log entry known to be commited (initialized to be 0)
+	lastApplied int // index of highest log entry applied to state machine (initialized to be 0)
+					// ^ these two indexes both increase monotonically
+		
+	// only leaders
+	nextIndex	[]int // for each server, index of the next log entry to send to that server
+					  // initizlied to leader last log index + 1
+	matchIndex	[]int // for each server, index of the highest log entry known to be replicated on server
 }
 
 // return currentTerm and whether this server
@@ -73,6 +85,9 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	
 	return term, isleader
 }
 
@@ -136,13 +151,20 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 }
 
-
+type LogEntry struct {
+	data string
+}
 //
 // example RequestVote RPC arguments structure.
 // field names must start with capital letters!
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Mu 			 sync.Mutex
+	Term 		 int // candidate's term
+	CandidateId  int // candidate requesting vote
+ 	LastLogIndex int // index of candidate's last log entry
+	LastLogTerm  int // term of candidate's last log entry
 }
 
 //
@@ -151,6 +173,9 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	Mu 			sync.Mutex
+	Term		int  // current term for candidate to update itself
+	VoteGranted	bool // true means candidate received vote
 }
 
 //
@@ -158,6 +183,10 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	// rules here:
+	// 1. Reply false if term < currentTerm
+	// 2. if votedFor is null or candidateId, and candidate's log is at least as
+	// up-to-date as receiver's log, grant vote
 }
 
 //
