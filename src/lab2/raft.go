@@ -19,6 +19,7 @@ package lab2
 
 import (
 	//	"bytes"
+	// "math/rand"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -203,11 +204,10 @@ type AppendEntryReply struct {
 func (rf *Raft) AppendEntriesRPCHandler(args *AppendEntryArgs, reply *AppendEntryReply) {
 	rf.mu.Lock()
 	reply.Term = rf.currentTerm
+	
 	if rf.currentTerm <= args.Term {
-		// means rf is a follower
 		if len(args.Entries) == 0 {
 			reply.Success = true
-			
 			rf.resetElectionTimer()
 			rf.votedFor = -1
 			rf.convertTo(Follower)
@@ -254,20 +254,18 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	
-	if rf.currentTerm <= args.Term {
-		if rf.currentTerm < args.Term {
-			rf.currentTerm = args.Term
-			rf.votedFor = -1
-			rf.convertTo(Follower)
-			
-			reply.Term = rf.currentTerm
-			reply.VoteGranted = true
-			return
-		}
+	if rf.currentTerm > args.Term {
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
 	}
 	
+	rf.currentTerm = args.Term
+	rf.convertTo(Follower)
+	rf.votedFor = -1
+	
 	reply.Term = rf.currentTerm
-	reply.VoteGranted = false
+	reply.VoteGranted = true
 }
 
 //
@@ -379,11 +377,9 @@ func (rf *Raft) startElection() {
 			}
 			
 			rf.mu.Unlock()
-			
 			var reply RequestVoteReply
 			go func (i int, args *RequestVoteArgs, reply *RequestVoteReply)  {
 				defer wg.Done()
-				
 				ok := rf.sendRequestVote(i, args, reply)
 				
 				if !ok {
@@ -401,7 +397,6 @@ func (rf *Raft) startElection() {
 				} else {
 					rf.mu.Lock()
 					*nVotes++
-					
 					if rf.state == Candidate && *nVotes >= len(rf.peers) / 2 + 1 {
 						rf.currentTerm = args.Term
 						rf.convertTo(Leader)
@@ -417,12 +412,11 @@ func (rf *Raft) startElection() {
 
 
 func (rf *Raft) broadcastHeartbeat() {
-	var wg sync.WaitGroup
-	// start sending heartbeat
 	if rf.state != Leader {
 		return
 	}
 	
+	var wg sync.WaitGroup
 	rf.mu.Lock()
 	rf.latestHeartTime = time.Now()
 	rf.mu.Unlock()
@@ -431,8 +425,8 @@ func (rf *Raft) broadcastHeartbeat() {
 		if i == rf.me {
 			continue
 		}
-		wg.Add(1)
 		
+		wg.Add(1)
 		go func (i int)  {
 			rf.mu.Lock()
 			entries := make([]LogEntry, 0)
@@ -525,12 +519,13 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
+	rf.state = Follower
 	rf.currentTerm = 0
-	rf.votedFor = -1 // means unvoted
-	rf.state = Follower // all servers are follower initially, so no one will send heartbeats
-	rf.heartbeatPeriod = 100
+	rf.votedFor = -1
 	rf.log = make([]LogEntry, 0)
 	rf.log = append(rf.log, LogEntry{Term: 0})
+	rf.voteCounts = 0
+	rf.heartbeatPeriod = 100 // each 100ms sends a heartbeat
 	
 	rf.resetElectionTimer()
 	rf.electionTimeoutChannel = make(chan bool)
